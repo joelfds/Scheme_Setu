@@ -1,0 +1,38 @@
+{
+  "Agriculture": [
+    {
+      "name": "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)",
+      "description": "Income support of ₹6,000 per year for all landholding farmer families.",
+      "criteria": "Must be a landholding farmer family. Institutional landholders are not eligible. Family income must be verified."
+    },
+    {
+      "name": "Soil Health Card Scheme",
+      "description": "Provides soil health cards to farmers to improve yield and reduce fertilizer cost.",
+      "criteria": "Available to all farmers. Must provide a soil sample from the cultivable land."
+    }
+  ],
+  "Education": [
+    {
+      "name": "Post-Matric Scholarship",
+      "description": "Financial assistance for SC/ST students studying at post-matriculation or post-secondary stage.",
+      "criteria": "Must belong to SC/ST category. Annual family income must be less than ₹2.5 Lakhs. Must be enrolled in a government-recognized institution."
+    },
+    {
+      "name": "National Overseas Scholarship",
+      "description": "Financial support for low-income students to pursue Masters/PhD abroad.",
+      "criteria": "Masters/PhD level only. Minimum 60% marks in previous degree. Age must be below 35 years."
+    }
+  ],
+  "MSME": [
+    {
+      "name": "PMEGP (Prime Minister's Employment Generation Programme)",
+      "description": "Credit-linked subsidy program for generation of employment opportunities through establishment of micro enterprises.",
+      "criteria": "Any individual above 18 years of age. Project cost up to ₹25 Lakhs (Manufacturing) or ₹10 Lakhs (Service). Minimum 8th pass for projects above ₹10 Lakhs."
+    },
+    {
+      "name": "Mudra Loan (Shishu)",
+      "description": "Loans up to ₹50,000 for new businesses.",
+      "criteria": "No collateral required. For micro-units/startups."
+    }
+  ]
+}
