@@ -4,6 +4,7 @@ import json
 import time
 import warnings
 import os
+import PIL.Image
 from dotenv import load_dotenv
 from google.api_core import exceptions
 
@@ -69,7 +70,7 @@ except FileNotFoundError:
     st.stop()
 
 # --- 3. THE INTELLIGENT AGENT BRAIN ---
-def ask_llm(history, schemes_context, current_domain, language):
+def ask_llm(history, schemes_context, current_domain, language, uploaded_image=None):
     """
     The core Agent function. 
     """
@@ -79,8 +80,16 @@ def ask_llm(history, schemes_context, current_domain, language):
     # SYSTEM PROMPT
     system_instruction = f"""
     ### ROLE
-    You are 'SchemeSetu', an intelligent, empathetic Government Scheme Caseworker Agent.
-    
+    You are 'SchemeSetu', a warm, respectful, and patient Government Scheme Guide.
+    Your goal is to bridge the gap between citizens and government support with empathy, not bureaucracy.
+
+    ### DESIGN & TONE GUIDELINES
+    1. **Tone:** Official yet approachable. Be calm and reassuring. Never use complex bureaucratic jargon.
+    2. **Structure:** Break responses into clear sections using icons and bullet points. 
+    3. **Visual Hierarchy:** - Use "✅" and bold text for positive outcomes (Eligible).
+       - Use "⚠️" for warnings (like document mismatches).
+       - Avoid red/error language unless absolutely necessary.
+
     ### CONTEXT
     - **User's Selected Domain:** {current_domain}
     - **User's Language:** {language}
@@ -91,16 +100,26 @@ def ask_llm(history, schemes_context, current_domain, language):
        - Even if the user types in English, your final output must be in {language}.
        - When mentioning scheme names, keep the English name in brackets.
     
-    2. **ELIGIBILITY INTERVIEW:**
+    2. **ELIGIBILITY INTERVIEW (The Human Touch):**
        - Compare user details against {current_domain} schemes.
        - Ask missing questions one by one (Income, Age, Category, etc.).
-       - **GOAL:** Your primary goal is to determine eligibility quickly so you can provide the application link.
+       - **Tone Check:** Instead of "Provide your income," say "Could you please share your annual family income so I can find the best match?"
+       - **GOAL:** Determine eligibility quickly but comfortably.
        
     3. **DIRECT LINK PROVISION (CRITICAL):**
        - As soon as you determine the user is eligible for a scheme, you MUST provide the 'url' from the database.
-       - Do not ask for documents or verification.
        - Format the link clearly as: "🔗 **Apply Here:** [URL]"
        - If multiple schemes match, list the links for each.
+
+    4. **OPTIONAL DOCUMENT VERIFICATION (VISION TASK):**
+       - **Trigger:** ONLY do this if the user has uploaded an image (provided in input).
+       - **Action:**
+         a. **Identify** the document (Aadhar, Pan, Marksheet, etc.).
+         b. **Check Consistency**: Extract Name/DOB from the image and compare with what the user stated in chat.
+         c. **Report with Reassurance**: 
+            - If Match: "✅ **Verified:** The name on your [Document Type] matches your application perfectly."
+            - If Mismatch: "⚠️ **Attention Needed:** I noticed a small difference. You mentioned your name is [Name in Chat], but the document says [Name on Doc]. Please ensure these match to avoid any issues later."
+         d. **Privacy Note:** Remind them that documents are processed temporarily for verification only.
 
     ### OUTPUT FORMAT
     Start with a hidden logic block:
@@ -115,6 +134,11 @@ def ask_llm(history, schemes_context, current_domain, language):
         messages_payload.append(f"{role_label}: {msg['content']}")
     
     messages_payload.append("\n--- NEW INPUT ---")
+    
+    if uploaded_image:
+        messages_payload.append("User has uploaded a document for verification:")
+        messages_payload.append(uploaded_image)
+
     messages_payload.append("Agent Response:")
 
     # --- RETRY LOGIC ---
@@ -143,23 +167,29 @@ st.set_page_config(page_title="SchemeSetu", page_icon="🇮🇳", layout="wide")
 
 st.markdown("""
 <style>
+    /* SchemeSetu Final Color Palette */
     :root {
-        --primary: #1e40af;
-        --secondary: #f59e0b;
-        --success: #10b981;
-        --text-dark: #1f2937;
-        --text-light: #6b7280;
-        --bg-light: #f9fafb;
-        --bg-white: #ffffff;
-        --border: #e5e7eb;
+        --primary: #1F3A5F;    /* Royal Blue - Authority & Trust */
+        --secondary: #B3D9FF;  /* Sky Blue - Comfort & Flow */
+        --success: #2E7D32;    /* Green - Eligible */
+        --warning: #F9A825;    /* Amber - Docs need attention */
+        --error: #C62828;      /* Red - Error */
+        
+        --text-primary: #1A1A1A;
+        --text-secondary: #5F6C7B;
+        
+        --bg-main: #F5F7FA;
+        --bg-white: #FFFFFF;
+        --bg-user-chat: #E8EEF5;
+        --border-light: #E2E8F0;
     }
     
     .stApp { 
-        background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-        color: var(--text-dark);
+        background-color: var(--bg-main);
+        color: var(--text-primary);
     }
     
-    /* Headers */
+    /* Headers - Royal Blue */
     h1 { 
         color: var(--primary);
         font-family: 'Segoe UI', 'Roboto', sans-serif;
@@ -172,75 +202,89 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* Text */
+    /* General Text */
     p, .stMarkdown { 
-        color: var(--text-dark);
+        color: var(--text-primary);
         line-height: 1.6;
     }
     
     /* Sidebar */
     .stSidebar {
         background-color: var(--bg-white);
-        border-right: 2px solid var(--border);
+        border-right: 1px solid var(--border-light);
     }
     
     .stSidebar h1, .stSidebar h2, .stSidebar .stSubheader {
         color: var(--primary);
     }
     
-    /* Chat Messages */
+    /* Chat Messages - Visual Hierarchy */
+    /* Note: Streamlit doesn't allow direct CSS styling of inner chat bubbles easily, 
+       but we can style the container to feel more open */
     .stChatMessage {
         border-radius: 12px;
-        padding: 16px;
-        border: 1px solid var(--border);
-        background-color: var(--bg-white);
+        padding: 1rem;
+        border: 1px solid transparent;
+        margin-bottom: 1rem;
     }
     
-    /* Buttons */
+    /* Avatar / Icon styling if possible */
+    .stChatMessage .stMarkdown {
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* Buttons - Royal Blue Primary Action */
     .stButton > button {
         background-color: var(--primary);
         color: white;
         border: none;
         border-radius: 8px;
-        font-weight: 500;
-        transition: all 0.3s ease;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s ease;
     }
     
     .stButton > button:hover {
-        background-color: #1e3a8a;
-        box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        background-color: #162c4b; /* Darker shade of Royal Blue */
+        box-shadow: 0 4px 12px rgba(31, 58, 95, 0.2);
     }
     
     /* Input fields */
     .stTextInput input, .stSelectbox select {
-        border-color: var(--border) !important;
+        border-color: var(--border-light) !important;
         border-radius: 8px;
-        color: var(--text-dark);
+        color: var(--text-primary);
+        background-color: var(--bg-white);
     }
     
-    /* Success messages */
+    /* Custom Alerts based on Palette */
     .stSuccess {
-        background-color: rgba(16, 185, 129, 0.1);
+        background-color: rgba(46, 125, 50, 0.1);
         border-left: 4px solid var(--success);
         color: var(--success);
     }
     
-    /* Error messages */
-    .stError {
-        background-color: rgba(239, 68, 68, 0.1);
-        border-left: 4px solid #ef4444;
-        color: #991b1b;
+    .stWarning {
+        background-color: rgba(249, 168, 37, 0.1);
+        border-left: 4px solid var(--warning);
+        color: #9c640c; /* Darker amber for text readability */
     }
     
-    /* Caption */
-    .stCaption {
-        color: var(--text-light);
-        font-size: 0.875rem;
+    .stError {
+        background-color: rgba(198, 40, 40, 0.1);
+        border-left: 4px solid var(--error);
+        color: var(--error);
     }
     
     /* Divider */
     hr {
-        border-color: var(--border);
+        border-color: var(--secondary);
+        opacity: 0.3;
+    }
+    
+    /* Caption */
+    .stCaption {
+        color: var(--text-secondary);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -267,6 +311,17 @@ with st.sidebar:
         index=0
     )
     
+    st.divider()
+    
+    st.subheader("📄 Verify Documents (Optional)")
+    uploaded_file = st.file_uploader("Upload ID/Certificate", type=["jpg", "png", "jpeg"])
+    
+    pil_image = None
+    if uploaded_file:
+        pil_image = PIL.Image.open(uploaded_file)
+        st.image(pil_image, caption="Document Uploaded", use_column_width=True)
+        st.success("Image ready for AI analysis")
+
     st.divider()
     st.caption(f"System Model: {WORKING_MODEL_NAME.replace('models/', '')}")
 
@@ -303,7 +358,8 @@ if prompt := st.chat_input("Type here... / यहाँ टाइप करे�
                 history=st.session_state.messages,
                 schemes_context=domain_schemes,
                 current_domain=selected_domain,
-                language=selected_language
+                language=selected_language,
+                uploaded_image=pil_image
             )
             st.markdown(response_text)
 
