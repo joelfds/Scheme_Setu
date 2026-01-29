@@ -12,10 +12,7 @@ from google.api_core import exceptions
 warnings.filterwarnings("ignore")
 
 # --- 1. CONFIGURATION ---
-# Load environment variables from .env file
 load_dotenv()
-
-# Get API Key from environment variable
 API_KEY = os.getenv("GOOGLE_API_KEY")
 
 if not API_KEY:
@@ -24,343 +21,659 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 
-# --- 2. DYNAMIC MODEL SELECTOR ---
+# --- 2. MODEL SETUP ---
 def get_best_model():
-    """
-    Automatically finds a working model name from your API key.
-    Prioritizes 1.5-flash (fast), then 1.5-pro, then others.
-    """
     try:
         available_models = []
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 available_models.append(m.name)
-        
-        # Priority list
-        preferred_order = [
-            "models/gemini-1.5-flash",
-            "models/gemini-1.5-flash-latest",
-            "models/gemini-1.5-pro",
-            "models/gemini-1.0-pro"
-        ]
-        
+        preferred_order = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro"]
         for preferred in preferred_order:
-            if preferred in available_models:
-                return preferred
-        
-        # If none of the preferred ones exist, take the first available one
-        if available_models:
-            return available_models[0]
-            
-        return "gemini-1.5-flash" 
-        
-    except Exception as e:
-        return "gemini-1.5-flash"
+            if preferred in available_models: return preferred
+        return available_models[0] if available_models else "gemini-1.5-flash"
+    except: return "gemini-1.5-flash"
 
-# Find the model once on startup
 WORKING_MODEL_NAME = get_best_model()
-print(f"--- SYSTEM: Using Model '{WORKING_MODEL_NAME}' ---")
 
-# Load the Scheme Database
+# Load Database
 try:
     with open('schemes.json', 'r') as f:
         SCHEME_DB = json.load(f)
 except FileNotFoundError:
-    st.error("Error: schemes.json file not found. Please create it first.")
+    st.error("Error: schemes.json not found.")
     st.stop()
 
-# --- 3. THE INTELLIGENT AGENT BRAIN ---
-def ask_llm(history, schemes_context, current_domain, language, uploaded_image=None):
-    """
-    The core Agent function. 
-    """
-    # Use the dynamically found model name
-    model = genai.GenerativeModel(WORKING_MODEL_NAME)
-    
-    # SYSTEM PROMPT
-    system_instruction = f"""
-    ### ROLE
-    You are 'SchemeSetu', a warm, respectful, and patient Government Scheme Guide.
-    Your goal is to bridge the gap between citizens and government support with empathy, not bureaucracy.
-
-    ### DESIGN & TONE GUIDELINES
-    1. **Tone:** Official yet approachable. Be calm and reassuring. Never use complex bureaucratic jargon.
-    2. **Structure:** Break responses into clear sections using icons and bullet points. 
-    3. **Visual Hierarchy:** - Use "✅" and bold text for positive outcomes (Eligible).
-       - Use "⚠️" for warnings (like document mismatches).
-       - Avoid red/error language unless absolutely necessary.
-
-    ### CONTEXT
-    - **User's Selected Domain:** {current_domain}
-    - **User's Language:** {language}
-    - **Available Schemes (English Database):** {json.dumps(schemes_context)}
-    
-    ### CORE INSTRUCTIONS
-    1. **LANGUAGE ADAPTATION:** - You MUST reply in **{language}**.
-       - Even if the user types in English, your final output must be in {language}.
-       - When mentioning scheme names, keep the English name in brackets.
-    
-    2. **ELIGIBILITY INTERVIEW (The Human Touch):**
-       - Compare user details against {current_domain} schemes.
-       - Ask missing questions one by one (Income, Age, Category, etc.).
-       - **Tone Check:** Instead of "Provide your income," say "Could you please share your annual family income so I can find the best match?"
-       - **GOAL:** Determine eligibility quickly but comfortably.
-       
-    3. **DIRECT LINK PROVISION (CRITICAL):**
-       - As soon as you determine the user is eligible for a scheme, you MUST provide the 'url' from the database.
-       - Format the link clearly as: "🔗 **Apply Here:** [URL]"
-       - If multiple schemes match, list the links for each.
-
-    4. **OPTIONAL DOCUMENT VERIFICATION (VISION TASK):**
-       - **Trigger:** ONLY do this if the user has uploaded an image (provided in input).
-       - **Action:**
-         a. **Identify** the document (Aadhar, Pan, Marksheet, etc.).
-         b. **Check Consistency**: Extract Name/DOB from the image and compare with what the user stated in chat.
-         c. **Report with Reassurance**: 
-            - If Match: "✅ **Verified:** The name on your [Document Type] matches your application perfectly."
-            - If Mismatch: "⚠️ **Attention Needed:** I noticed a small difference. You mentioned your name is [Name in Chat], but the document says [Name on Doc]. Please ensure these match to avoid any issues later."
-         d. **Privacy Note:** Remind them that documents are processed temporarily for verification only.
-
-    ### OUTPUT FORMAT
-    Start with a hidden logic block:
-    [Status: Checking eligibility... ]
-    Then provide the response.
-    """
-    
-    # Build payload
-    messages_payload = [system_instruction + "\n\n--- CHAT HISTORY ---"]
-    for msg in history:
-        role_label = "USER" if msg['role'] == "user" else "AGENT"
-        messages_payload.append(f"{role_label}: {msg['content']}")
-    
-    messages_payload.append("\n--- NEW INPUT ---")
-    
-    if uploaded_image:
-        messages_payload.append("User has uploaded a document for verification:")
-        messages_payload.append(uploaded_image)
-
-    messages_payload.append("Agent Response:")
-
-    # --- RETRY LOGIC ---
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = model.generate_content(messages_payload)
-            return response.text
-        except exceptions.ResourceExhausted:
-            time.sleep(2 ** attempt)
-            continue
-        except Exception as e:
-            # If 1.5 Flash fails on 404 inside the loop, try Pro as last resort
-            if "404" in str(e) and "flash" in WORKING_MODEL_NAME:
-                 try:
-                     fallback_model = genai.GenerativeModel("gemini-pro")
-                     return fallback_model.generate_content(messages_payload).text
-                 except:
-                     pass
-            return f"System Error: {str(e)}"
-    
-    return "⚠️ Server is busy (Rate Limit). Please wait 30 seconds."
-
-# --- 4. STREAMLIT USER INTERFACE ---
-st.set_page_config(page_title="SchemeSetu", page_icon="🇮🇳", layout="wide")
+# --- 3. UI & CSS WIZARDRY (PROFESSIONAL DESIGN) ---
+st.set_page_config(
+    page_title="SchemeSetu - Government Schemes Finder", 
+    page_icon="🏛️", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 st.markdown("""
 <style>
-    /* SchemeSetu Final Color Palette */
+    /* PROFESSIONAL COLOR PALETTE */
     :root {
-        --primary: #1F3A5F;    /* Royal Blue - Authority & Trust */
-        --secondary: #B3D9FF;  /* Sky Blue - Comfort & Flow */
-        --success: #2E7D32;    /* Green - Eligible */
-        --warning: #F9A825;    /* Amber - Docs need attention */
-        --error: #C62828;      /* Red - Error */
-        
-        --text-primary: #1A1A1A;
-        --text-secondary: #5F6C7B;
-        
-        --bg-main: #F5F7FA;
-        --bg-white: #FFFFFF;
-        --bg-user-chat: #E8EEF5;
-        --border-light: #E2E8F0;
+        --primary: #0D47A1;
+        --primary-light: #1565C0;
+        --primary-lighter: #E3F2FD;
+        --secondary: #00897B;
+        --accent: #F57F17;
+        --text-primary: #212121;
+        --text-secondary: #616161;
+        --border-color: #BDBDBD;
+        --success: #2E7D32;
+        --warning: #F57F17;
+        --error: #C62828;
+        --bg-light: #FAFAFA;
+        --bg-card: #FFFFFF;
     }
-    
-    .stApp { 
-        background-color: var(--bg-main);
-        color: var(--text-primary);
+
+    /* 1. MAIN APP BACKGROUND */
+    .stApp {
+        background: linear-gradient(135deg, #F5F7FA 0%, #E8EFF7 100%);
+        background-attachment: fixed;
     }
-    
-    /* Headers - Royal Blue */
-    h1 { 
-        color: var(--primary);
-        font-family: 'Segoe UI', 'Roboto', sans-serif;
+
+    .block-container {
+        max-width: 1200px;
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+    }
+
+    /* 2. HEADER STYLING */
+    h1, h2, h3 {
+        color: var(--primary) !important;
         font-weight: 700;
         letter-spacing: -0.5px;
     }
-    
-    h2, h3 { 
-        color: var(--primary);
-        font-weight: 600;
-    }
-    
-    /* General Text */
-    p, .stMarkdown { 
-        color: var(--text-primary);
-        line-height: 1.6;
-    }
-    
-    /* Sidebar */
-    .stSidebar {
-        background-color: var(--bg-white);
-        border-right: 1px solid var(--border-light);
-    }
-    
-    .stSidebar h1, .stSidebar h2, .stSidebar .stSubheader {
-        color: var(--primary);
-    }
-    
-    /* Chat Messages - Visual Hierarchy */
-    /* Note: Streamlit doesn't allow direct CSS styling of inner chat bubbles easily, 
-       but we can style the container to feel more open */
-    .stChatMessage {
-        border-radius: 12px;
-        padding: 1rem;
-        border: 1px solid transparent;
-        margin-bottom: 1rem;
-    }
-    
-    /* Avatar / Icon styling if possible */
-    .stChatMessage .stMarkdown {
-        font-family: 'Segoe UI', sans-serif;
+
+    h1 {
+        font-size: 2.2rem !important;
+        margin-bottom: 0.5rem !important;
     }
 
-    /* Buttons - Royal Blue Primary Action */
+    h2 {
+        font-size: 1.6rem !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 0.8rem !important;
+    }
+
+    /* 3. SIDEBAR PROFESSIONAL DESIGN */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0D47A1 0%, #1565C0 100%);
+        border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3 {
+        color: #FFFFFF !important;
+    }
+
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: rgba(255,255,255,0.9) !important;
+    }
+
+    section[data-testid="stSidebar"] .stCaption {
+        color: rgba(255,255,255,0.7) !important;
+        font-size: 0.8rem;
+    }
+
+    /* Sidebar Input Elements */
+    section[data-testid="stSidebar"] .stSelectbox > div > div,
+    section[data-testid="stSidebar"] .stMultiSelect > div > div {
+        background-color: rgba(255,255,255,0.95) !important;
+        color: var(--primary) !important;
+        border: 2px solid rgba(255,255,255,0.3) !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease;
+    }
+
+    section[data-testid="stSidebar"] .stSelectbox > div > div:hover,
+    section[data-testid="stSidebar"] .stMultiSelect > div > div:hover {
+        border-color: rgba(255,255,255,0.6) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    }
+
+    /* Sidebar Radio Buttons */
+    section[data-testid="stSidebar"] .stRadio > label {
+        color: rgba(255,255,255,0.95) !important;
+    }
+
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
+        background-color: rgba(255,255,255,0.1);
+        border: 2px solid rgba(255,255,255,0.2);
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        transition: all 0.3s ease;
+        color: rgba(255,255,255,0.95) !important;
+        font-weight: 500;
+    }
+
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
+        background-color: rgba(255,255,255,0.2);
+        border-color: rgba(255,255,255,0.5);
+    }
+
+    /* File Uploader */
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+        padding: 1.5rem;
+        background-color: rgba(255,255,255,0.95);
+        border-radius: 12px;
+        border: 2px dashed rgba(13, 71, 161, 0.3);
+        margin-top: 0.5rem;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+        background-color: transparent;
+    }
+
+    /* Sidebar Dividers */
+    section[data-testid="stSidebar"] hr {
+        margin: 1.5rem 0;
+        border-color: rgba(255,255,255,0.2);
+    }
+
+    /* 4. CHAT MESSAGE STYLING */
+    .stChatMessage {
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.06);
+        background-color: var(--bg-card);
+        animation: slideIn 0.3s ease-out;
+        color: var(--text-primary) !important;
+    }
+    
+    .stChatMessage p, .stChatMessage div, .stChatMessage span, .stChatMessage a {
+        color: var(--text-primary) !important;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* 5. BUTTON STYLING */
     .stButton > button {
-        background-color: var(--primary);
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
+        padding: 10px 24px;
         font-weight: 600;
-        padding: 0.5rem 1rem;
-        transition: all 0.2s ease;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(13, 71, 161, 0.25);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.85rem;
     }
-    
+
     .stButton > button:hover {
-        background-color: #162c4b; /* Darker shade of Royal Blue */
-        box-shadow: 0 4px 12px rgba(31, 58, 95, 0.2);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(13, 71, 161, 0.35);
     }
-    
-    /* Input fields */
-    .stTextInput input, .stSelectbox select {
-        border-color: var(--border-light) !important;
-        border-radius: 8px;
-        color: var(--text-primary);
-        background-color: var(--bg-white);
+
+    .stButton > button:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(13, 71, 161, 0.25);
     }
-    
-    /* Custom Alerts based on Palette */
+
+    /* 6. METRIC CARDS */
+    [data-testid="metric-container"] {
+        background-color: var(--bg-card);
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 5px solid var(--primary);
+        animation: slideIn 0.4s ease-out;
+    }
+
+    /* 7. SUCCESS/ERROR/WARNING BOXES */
     .stSuccess {
-        background-color: rgba(46, 125, 50, 0.1);
-        border-left: 4px solid var(--success);
-        color: var(--success);
+        background: linear-gradient(135deg, rgba(46, 125, 50, 0.1) 0%, rgba(46, 125, 50, 0.05) 100%);
+        border-left: 5px solid var(--success);
+        border-radius: 10px;
+        padding: 1.2rem;
+        color: #1B5E20;
+        animation: slideIn 0.3s ease-out;
     }
-    
-    .stWarning {
-        background-color: rgba(249, 168, 37, 0.1);
-        border-left: 4px solid var(--warning);
-        color: #9c640c; /* Darker amber for text readability */
-    }
-    
+
     .stError {
-        background-color: rgba(198, 40, 40, 0.1);
-        border-left: 4px solid var(--error);
-        color: var(--error);
+        background: linear-gradient(135deg, rgba(198, 40, 40, 0.1) 0%, rgba(198, 40, 40, 0.05) 100%);
+        border-left: 5px solid var(--error);
+        border-radius: 10px;
+        padding: 1.2rem;
+        color: #B71C1C;
+        animation: slideIn 0.3s ease-out;
     }
-    
-    /* Divider */
-    hr {
-        border-color: var(--secondary);
-        opacity: 0.3;
+
+    .stWarning {
+        background: linear-gradient(135deg, rgba(245, 127, 23, 0.1) 0%, rgba(245, 127, 23, 0.05) 100%);
+        border-left: 5px solid var(--warning);
+        border-radius: 10px;
+        padding: 1.2rem;
+        color: #E65100;
+        animation: slideIn 0.3s ease-out;
     }
-    
-    /* Caption */
+
+    .stInfo {
+        background: linear-gradient(135deg, rgba(13, 71, 161, 0.1) 0%, rgba(13, 71, 161, 0.05) 100%);
+        border-left: 5px solid var(--primary);
+        border-radius: 10px;
+        padding: 1.2rem;
+        color: #0D47A1;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    /* 8. INPUT FIELDS */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stNumberInput > div > div > input {
+        border: 2px solid #E0E0E0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(13, 71, 161, 0.1);
+    }
+
+    /* 9. EXPANDER/STATUS */
+    .stExpander > div {
+        border: 1px solid #E0E0E0;
+        border-radius: 10px;
+        background-color: var(--bg-light);
+    }
+
+    .stStatus {
+        border-radius: 10px;
+    }
+
+    /* 10. TABS */
+    .stTabs > div > div > button {
+        border-radius: 10px 10px 0 0;
+        transition: all 0.3s ease;
+    }
+
+    .stTabs > div > div > button[aria-selected="true"] {
+        border-bottom: 3px solid var(--primary);
+        color: var(--primary);
+    }
+
+    /* 11. CAPTION & SMALL TEXT */
     .stCaption {
         color: var(--text-secondary);
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    /* 12. MARKDOWN STYLING */
+    .stMarkdown a {
+        color: var(--primary);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        transition: border-color 0.3s ease;
+    }
+
+    .stMarkdown a:hover {
+        border-bottom-color: var(--primary);
+    }
+
+    /* 13. EMOJI SIZING */
+    .stMarkdown {
+        line-height: 1.6;
+    }
+
+    /* 14. DIVIDER */
+    hr {
+        border: none;
+        border-top: 2px solid #E0E0E0;
+        margin: 2rem 0;
+    }
+
+    /* 15. SCROLL AREA */
+    div[data-testid="stSidebarUserContent"] {
+        padding-top: 1rem;
+    }
+
+    /* 16. RESPONSIVE */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.8rem !important; }
+        h2 { font-size: 1.3rem !important; }
+        .block-container { max-width: 100%; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.title("SchemeSetu | स्कीम-सेतु")
-st.caption("Bridging the gap between Citizens and Government Support")
+# --- 4. THE INTELLIGENT ASSISTANT ---
+def ask_llm(history, schemes_context, current_domain, language, uploaded_image=None):
+    model = genai.GenerativeModel(WORKING_MODEL_NAME)
+    
+    system_instruction = f"""
+    ### ROLE
+    You are 'SchemeSetu', a professional and intelligent Government Scheme Assistant.
+    You help users discover and apply for government schemes they are eligible for.
 
-# --- SIDEBAR ---
+    ### TONE & STYLE
+    1. **Professional yet Friendly:** Be helpful, clear, and direct.
+    2. **Structure:** Use clear formatting with bullet points and proper spacing.
+    3. **Accuracy:** Provide factual information only.
+    4. **Engagement:** Use relevant emojis sparingly for visual appeal.
+
+    ### CONTEXT
+    - Domain: {current_domain}
+    - Language: {language}
+    - Schemes: {json.dumps(schemes_context)}
+
+    ### INSTRUCTIONS
+    1. **ELIGIBILITY ASSESSMENT:**
+       - Ask clarifying questions one at a time
+       - Be concise and specific
+       - Example: "What is your family's annual income?"
+
+    2. **DOCUMENT VERIFICATION:**
+       - If image uploaded: Verify and provide feedback
+       - Point out any discrepancies if found
+
+    3. **RESULT PRESENTATION:**
+       - When user is eligible, present clearly with:
+         🎉 **Congratulations! You are Eligible!**
+         
+         **Scheme Name:** [Name]
+         ✅ **Eligibility:** [Reasons]
+         📋 **Benefits:** [Benefits]
+         🔗 **Apply at:** [URL]
+    
+    4. **ALWAYS PROVIDE DIRECT APPLICATION LINKS**
+    """
+    
+    messages_payload = [system_instruction + "\n\n--- CHAT HISTORY ---"]
+    for msg in history:
+        role = "USER" if msg['role'] == "user" else "ASSISTANT"
+        messages_payload.append(f"{role}: {msg['content']}")
+    
+    if uploaded_image:
+        messages_payload.append("\nUSER: [Document uploaded for verification]")
+    
+    messages_payload.append("\nASSISTANT:")
+
+    try:
+        return model.generate_content(messages_payload).text
+    except Exception as e:
+        return "⚠️ Unable to process your request. Please try again in a moment."
+
+# --- 5. SIDEBAR (PROFESSIONAL DESIGN) ---
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <h2 style="color: white; margin: 0; font-size: 1.8rem;">🏛️ SchemeSetu</h2>
+        <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0 0 0; font-size: 0.9rem;">Government Schemes Finder</p>
+    </div>
+    """, unsafe_allow_html=True)
     
+    st.divider()
+    
+    # Language Selection
+    st.markdown("**🗣️ Select Language**")
     selected_language = st.selectbox(
-        "🗣️ Select Language / भाषा",
-        ["English", "Hindi (हिंदी)", "Marathi (मराठी)", "Tamil (தமிழ்)", "Telugu (తెలుగు)", "Kannada (ಕನ್ನಡ)"]
+        "Language", 
+        ["English", "Hindi", "Marathi", "Tamil", "Telugu"],
+        label_visibility="collapsed"
     )
     
     st.divider()
     
-    st.subheader("🎯 I am looking for:")
-    selected_domain = st.radio(
-        "Select Category:",
-        ["Agriculture", "Education", "MSME"],
-        index=0
+    # Domain Selection
+    st.markdown("**🎯 Choose Scheme Category**")
+    domain_options = ["🌾 Agriculture", "🎓 Education", "💼 MSME"]
+    selected_domain_with_emoji = st.radio(
+        "Select Domain",
+        domain_options,
+        label_visibility="collapsed"
     )
+    selected_domain = selected_domain_with_emoji.split(" ", 1)[1]
     
     st.divider()
     
-    st.subheader("📄 Verify Documents (Optional)")
-    uploaded_file = st.file_uploader("Upload ID/Certificate", type=["jpg", "png", "jpeg"])
+    # Document Upload
+    st.markdown("**📄 Document Verification (Optional)**")
+    st.caption("Upload your ID or certificate to verify eligibility")
+    uploaded_file = st.file_uploader(
+        "Upload Document", 
+        type=["jpg", "png", "jpeg"],
+        label_visibility="collapsed"
+    )
     
-    pil_image = None
     if uploaded_file:
-        pil_image = PIL.Image.open(uploaded_file)
-        st.image(pil_image, caption="Document Uploaded", use_column_width=True)
-        st.success("Image ready for AI analysis")
-
+        st.success("✅ Document uploaded successfully!")
+    
     st.divider()
-    st.caption(f"System Model: {WORKING_MODEL_NAME.replace('models/', '')}")
+    
+    # Info Section
+    st.markdown("""
+    <div style="background-color: rgba(255,255,255,0.1); border-radius: 10px; padding: 1rem; margin-top: 2rem;">
+        <p style="color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.6; margin: 0;">
+            <strong>💡 How it works:</strong><br>
+            1. Select your category<br>
+            2. Answer questions<br>
+            3. Get eligible schemes<br>
+            4. Apply directly
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- SESSION STATE ---
+    pil_image = PIL.Image.open(uploaded_file) if uploaded_file else None
+
+# --- 6. SESSION STATE ---
 if "messages" not in st.session_state:
-    st.session_state["messages"] = []
-if "last_domain" not in st.session_state:
-    st.session_state["last_domain"] = None
+    st.session_state.messages = []
 
-if selected_domain != st.session_state["last_domain"]:
-    st.session_state["messages"] = []
-    st.session_state["last_domain"] = selected_domain
-    
-    greeting = f"Hello! I am SchemeSetu. I see you are interested in **{selected_domain}**. How can I help you today?"
-    if "Hindi" in selected_language:
-        greeting = f"नमस्ते! मैं स्कीम-सेतु हूँ। मैं देख रहा हूँ कि आप **{selected_domain}** (कृषि/शिक्षा) में रुचि रखते हैं। मैं आपकी सहायता कैसे कर सकता हूँ?"
-    
-    st.session_state.messages.append({"role": "assistant", "content": greeting})
+# --- 7. MAIN CHAT AREA ---
 
-# --- MAIN LOOP ---
+# A. HERO SECTION (Show if chat is empty)
+if len(st.session_state.messages) == 0:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("""
+        <div style="text-align: center; padding: 3rem 2rem; background: linear-gradient(135deg, #E3F2FD 0%, #F5F7FA 100%); border-radius: 16px; margin-bottom: 2rem; border: 1px solid #BBDEFB;">
+            <h1 style="margin: 0 0 0.5rem 0; font-size: 2.5rem; color: #0D47A1;">👋 Welcome to SchemeSetu</h1>
+            <p style="color: #616161; font-size: 1.1rem; margin: 0; line-height: 1.6;">
+                Discover government schemes you're eligible for<br>
+                <span style="font-size: 0.95rem; color: #999;">AI-Powered • 100+ Schemes • Instant Matching</span>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Display category selection message
+    st.markdown(f"""
+    <div style="background: #FFFFFF; padding: 1.5rem; border-radius: 12px; border: 1px solid #E0E0E0; margin-bottom: 2rem; text-align: center;">
+        <p style="color: #616161; margin: 0; font-weight: 500;">
+            📌 You selected: <strong style="color: #0D47A1;">{selected_domain}</strong>
+        </p>
+        <p style="color: #999; font-size: 0.9rem; margin: 0.5rem 0 0 0;">
+            (Change this in the sidebar ➜)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # B. DYNAMIC QUICK ACTION BUTTONS BASED ON SELECTED CATEGORY
+    st.markdown("**Get started with a quick option:**")
+    col1, col2 = st.columns(2)
+    
+    if selected_domain == "Education":
+        with col1:
+            st.markdown("---")
+            if st.button("🎓 Education Loan", use_container_width=True, key="btn_1"):
+                st.session_state.messages.append({"role": "user", "content": "I need help with education loans"})
+                st.rerun()
+            
+            if st.button("📚 Scholarship Programs", use_container_width=True, key="btn_2"):
+                st.session_state.messages.append({"role": "user", "content": "I'm looking for scholarship opportunities"})
+                st.rerun()
+        
+        with col2:
+            st.markdown("---")
+            if st.button("🎒 Student Aid", use_container_width=True, key="btn_3"):
+                st.session_state.messages.append({"role": "user", "content": "What student aid schemes are available?"})
+                st.rerun()
+            
+            if st.button("📖 Special Needs Support", use_container_width=True, key="btn_4"):
+                st.session_state.messages.append({"role": "user", "content": "I need special education support"})
+                st.rerun()
+    
+    elif selected_domain == "Agriculture":
+        with col1:
+            st.markdown("---")
+            if st.button("🌾 Crop Support", use_container_width=True, key="btn_1"):
+                st.session_state.messages.append({"role": "user", "content": "I'm a farmer looking for crop support schemes"})
+                st.rerun()
+            
+            if st.button("🚜 Farm Equipment", use_container_width=True, key="btn_2"):
+                st.session_state.messages.append({"role": "user", "content": "I need help with farm equipment subsidies"})
+                st.rerun()
+        
+        with col2:
+            st.markdown("---")
+            if st.button("💧 Irrigation Support", use_container_width=True, key="btn_3"):
+                st.session_state.messages.append({"role": "user", "content": "What irrigation schemes are available?"})
+                st.rerun()
+            
+            if st.button("💰 Farmer Income Support", use_container_width=True, key="btn_4"):
+                st.session_state.messages.append({"role": "user", "content": "I need direct income support"})
+                st.rerun()
+    
+    elif selected_domain == "MSME":
+        with col1:
+            st.markdown("---")
+            if st.button("💼 Startup Loan", use_container_width=True, key="btn_1"):
+                st.session_state.messages.append({"role": "user", "content": "I want to start my business and need a loan"})
+                st.rerun()
+            
+            if st.button("🏭 Manufacturing Support", use_container_width=True, key="btn_2"):
+                st.session_state.messages.append({"role": "user", "content": "I'm setting up a manufacturing unit"})
+                st.rerun()
+        
+        with col2:
+            st.markdown("---")
+            if st.button("🛒 Retail/Service Business", use_container_width=True, key="btn_3"):
+                st.session_state.messages.append({"role": "user", "content": "I'm starting a retail or service business"})
+                st.rerun()
+            
+            if st.button("📈 Business Growth", use_container_width=True, key="btn_4"):
+                st.session_state.messages.append({"role": "user", "content": "I need schemes for business expansion"})
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # Feature highlights
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""
+        <div style="text-align: center; padding: 1.5rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E0E0E0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚡</div>
+            <p style="font-weight: 600; color: #0D47A1; margin: 0.5rem 0;">Instant Matching</p>
+            <p style="color: #616161; font-size: 0.9rem; margin: 0;">Get results in seconds</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div style="text-align: center; padding: 1.5rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E0E0E0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔒</div>
+            <p style="font-weight: 600; color: #0D47A1; margin: 0.5rem 0;">Secure & Safe</p>
+            <p style="color: #616161; font-size: 0.9rem; margin: 0;">Your data protected</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div style="text-align: center; padding: 1.5rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E0E0E0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌍</div>
+            <p style="font-weight: 600; color: #0D47A1; margin: 0.5rem 0;">Multi-Lingual</p>
+            <p style="color: #616161; font-size: 0.9rem; margin: 0;">5+ languages</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+# C. CHAT HISTORY (PROFESSIONAL DISPLAY)
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    avatar = "👤" if message["role"] == "user" else "🏛️"
+    
+    with st.chat_message(message["role"], avatar=avatar):
+        content = message["content"]
+        
+        # Render eligibility results with special styling
+        if "🎉" in content and "eligible" in content.lower():
+            parts = content.split("🎉")
+            if len(parts) > 1:
+                st.markdown(parts[0])
+                st.success(f"🎉 {parts[1]}")
+            else:
+                st.success(content)
+        else:
+            st.markdown(content)
 
-if prompt := st.chat_input("Type here... / यहाँ टाइप करें..."):
+# D. AUTO-PROCESS USER MESSAGES (from quick buttons or input)
+if len(st.session_state.messages) > 0:
+    last_message = st.session_state.messages[-1]
+    
+    # Check if last message is from user and doesn't have a response yet
+    if last_message["role"] == "user":
+        # Count user-assistant pairs to see if we need a response
+        user_count = sum(1 for m in st.session_state.messages if m["role"] == "user")
+        assistant_count = sum(1 for m in st.session_state.messages if m["role"] == "assistant")
+        
+        # If there are more users than assistants, we need to generate a response
+        if user_count > assistant_count:
+            with st.chat_message("assistant", avatar="🏛️"):
+                # Processing status with animation
+                with st.status("🔍 Analyzing your query...", expanded=True) as status:
+                    time.sleep(0.2)
+                    status.update(label="📚 Matching with schemes...", state="running")
+                    
+                    domain_schemes = SCHEME_DB.get(selected_domain, [])
+                    response_text = ask_llm(
+                        st.session_state.messages, 
+                        domain_schemes, 
+                        selected_domain, 
+                        selected_language, 
+                        pil_image
+                    )
+                    status.update(label="✅ Complete!", state="complete", expanded=False)
+                    
+                # Display response with special formatting
+                if "🎉" in response_text:
+                    parts = response_text.split("🎉")
+                    if len(parts) > 1:
+                        st.markdown(parts[0])
+                        st.success(f"🎉 {parts[1]}")
+                    else:
+                        st.success(response_text)
+                else:
+                    st.markdown(response_text)
+                    
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+
+# E. INPUT AREA
+if prompt := st.chat_input("💬 Tell me what you're looking for...", max_chars=500):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner(f"Thinking... ({WORKING_MODEL_NAME})"):
-            domain_schemes = SCHEME_DB.get(selected_domain, [])
-            response_text = ask_llm(
-                history=st.session_state.messages,
-                schemes_context=domain_schemes,
-                current_domain=selected_domain,
-                language=selected_language,
-                uploaded_image=pil_image
-            )
-            st.markdown(response_text)
-
-    st.session_state.messages.append({"role": "assistant", "content": response_text})
+    st.rerun()
