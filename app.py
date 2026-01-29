@@ -1,24 +1,33 @@
 import streamlit as st
 import google.generativeai as genai
 import json
-import PIL.Image
 import time
 import warnings
+import os
+from dotenv import load_dotenv
 from google.api_core import exceptions
 
 # --- 0. SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore")
 
 # --- 1. CONFIGURATION ---
-# REPLACE THIS WITH YOUR ACTUAL API KEY
-API_KEY = "AIzaSyA19h55TzOrPu5cyLHtl2FsDZk7bWahFmg" 
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API Key from environment variable
+API_KEY = os.getenv("GOOGLE_API_KEY")
+
+if not API_KEY:
+    st.error("⚠️ Error: API Key not found. Please create a .env file and add your GOOGLE_API_KEY.")
+    st.stop()
+
 genai.configure(api_key=API_KEY)
 
-# --- 2. DYNAMIC MODEL SELECTOR (THE FIX) ---
+# --- 2. DYNAMIC MODEL SELECTOR ---
 def get_best_model():
     """
     Automatically finds a working model name from your API key.
-    Prioritizes 1.5-flash (fast/multimodal), then 1.5-pro, then others.
+    Prioritizes 1.5-flash (fast), then 1.5-pro, then others.
     """
     try:
         available_models = []
@@ -31,7 +40,6 @@ def get_best_model():
             "models/gemini-1.5-flash",
             "models/gemini-1.5-flash-latest",
             "models/gemini-1.5-pro",
-            "models/gemini-pro-vision", # Old but supports images
             "models/gemini-1.0-pro"
         ]
         
@@ -43,10 +51,9 @@ def get_best_model():
         if available_models:
             return available_models[0]
             
-        return "gemini-1.5-flash" # Fallback default
+        return "gemini-1.5-flash" 
         
     except Exception as e:
-        # If listing fails, just return the standard default
         return "gemini-1.5-flash"
 
 # Find the model once on startup
@@ -62,7 +69,7 @@ except FileNotFoundError:
     st.stop()
 
 # --- 3. THE INTELLIGENT AGENT BRAIN ---
-def ask_llm(history, schemes_context, current_domain, language, uploaded_image=None):
+def ask_llm(history, schemes_context, current_domain, language):
     """
     The core Agent function. 
     """
@@ -84,21 +91,20 @@ def ask_llm(history, schemes_context, current_domain, language, uploaded_image=N
        - Even if the user types in English, your final output must be in {language}.
        - When mentioning scheme names, keep the English name in brackets.
     
-    2. **DOCUMENT VERIFICATION:**
-       - IF an image is provided:
-         a. Identify the document (Aadhar, Pan, etc.).
-         b. Check **Validity** (Expiry, Readability).
-         c. Check **Consistency** (Does Name/DOB match chat history?).
-         d. If mismatch, warn the user politely.
-    
-    3. **ELIGIBILITY INTERVIEW:**
+    2. **ELIGIBILITY INTERVIEW:**
        - Compare user details against {current_domain} schemes.
-       - Ask missing questions one by one.
-       - If eligible, state: "✅ You are eligible for [Scheme Name]".
+       - Ask missing questions one by one (Income, Age, Category, etc.).
+       - **GOAL:** Your primary goal is to determine eligibility quickly so you can provide the application link.
+       
+    3. **DIRECT LINK PROVISION (CRITICAL):**
+       - As soon as you determine the user is eligible for a scheme, you MUST provide the 'url' from the database.
+       - Do not ask for documents or verification.
+       - Format the link clearly as: "🔗 **Apply Here:** [URL]"
+       - If multiple schemes match, list the links for each.
 
     ### OUTPUT FORMAT
     Start with a hidden logic block:
-    [Status: Verifying Document... ]
+    [Status: Checking eligibility... ]
     Then provide the response.
     """
     
@@ -109,11 +115,6 @@ def ask_llm(history, schemes_context, current_domain, language, uploaded_image=N
         messages_payload.append(f"{role_label}: {msg['content']}")
     
     messages_payload.append("\n--- NEW INPUT ---")
-    
-    if uploaded_image:
-        messages_payload.append("User has uploaded a document for verification:")
-        messages_payload.append(uploaded_image)
-    
     messages_payload.append("Agent Response:")
 
     # --- RETRY LOGIC ---
@@ -245,12 +246,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Header
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/5/55/Emblem_of_India.svg", width=80)
-with col2:
-    st.title("SchemeSetu | स्कीम-सेतु")
-    st.caption("Bridging the gap between Citizens and Government Support")
+st.title("SchemeSetu | स्कीम-सेतु")
+st.caption("Bridging the gap between Citizens and Government Support")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -269,17 +266,6 @@ with st.sidebar:
         ["Agriculture", "Education", "MSME"],
         index=0
     )
-    
-    st.divider()
-    
-    st.subheader("📄 Verify Documents")
-    uploaded_file = st.file_uploader("Upload ID/Certificate (Optional)", type=["jpg", "png", "jpeg"])
-    
-    pil_image = None
-    if uploaded_file:
-        pil_image = PIL.Image.open(uploaded_file)
-        st.image(pil_image, caption="Document Uploaded", use_column_width=True)
-        st.success("Image ready for AI analysis")
     
     st.divider()
     st.caption(f"System Model: {WORKING_MODEL_NAME.replace('models/', '')}")
@@ -317,11 +303,8 @@ if prompt := st.chat_input("Type here... / यहाँ टाइप करे�
                 history=st.session_state.messages,
                 schemes_context=domain_schemes,
                 current_domain=selected_domain,
-                language=selected_language,
-                uploaded_image=pil_image
+                language=selected_language
             )
             st.markdown(response_text)
-            if pil_image:
-                st.caption("✅ Document analyzed.")
 
     st.session_state.messages.append({"role": "assistant", "content": response_text})

@@ -3,36 +3,150 @@
     {
       "name": "PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)",
       "description": "Income support of ₹6,000 per year for all landholding farmer families.",
-      "criteria": "Must be a landholding farmer family. Institutional landholders are not eligible. Family income must be verified."
+      "criteria": "Must be a landholding farmer family. Institutional landholders are not eligible. Family income must be verified.",
+      "url": "https://pmkisan.gov.in/"
     },
     {
       "name": "Soil Health Card Scheme",
       "description": "Provides soil health cards to farmers to improve yield and reduce fertilizer cost.",
-      "criteria": "Available to all farmers. Must provide a soil sample from the cultivable land."
-    }
-  ],
-  "Education": [
-    {
-      "name": "Post-Matric Scholarship",
-      "description": "Financial assistance for SC/ST students studying at post-matriculation or post-secondary stage.",
-      "criteria": "Must belong to SC/ST category. Annual family income must be less than ₹2.5 Lakhs. Must be enrolled in a government-recognized institution."
-    },
-    {
-      "name": "National Overseas Scholarship",
-      "description": "Financial support for low-income students to pursue Masters/PhD abroad.",
-      "criteria": "Masters/PhD level only. Minimum 60% marks in previous degree. Age must be below 35 years."
+      "criteria": "Available to all farmers. Must provide a soil sample from the cultivable land.",
+      "url": "https://soilhealth.dac.gov.in/"
     }
   ],
   "MSME": [
     {
       "name": "PMEGP (Prime Minister's Employment Generation Programme)",
       "description": "Credit-linked subsidy program for generation of employment opportunities through establishment of micro enterprises.",
-      "criteria": "Any individual above 18 years of age. Project cost up to ₹25 Lakhs (Manufacturing) or ₹10 Lakhs (Service). Minimum 8th pass for projects above ₹10 Lakhs."
+      "criteria": "Any individual above 18 years of age. Project cost up to ₹25 Lakhs (Manufacturing) or ₹10 Lakhs (Service). Minimum 8th pass for projects above ₹10 Lakhs.",
+      "url": "https://www.kviconline.gov.in/pmegpeportal/"
     },
     {
       "name": "Mudra Loan (Shishu)",
       "description": "Loans up to ₹50,000 for new businesses.",
-      "criteria": "No collateral required. For micro-units/startups."
+      "criteria": "No collateral required. For micro-units/startups.",
+      "url": "https://www.mudra.org.in/"
+    }
+  ],
+  "Education": [
+    {
+      "name": "Financial Assistance for Special Needs",
+      "description": "Inclusive education aid for students with special needs. High Priority.",
+      "criteria": "Category: Special Needs. Course Level: School, UG, PG.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Post-Matric Scholarship (SC/ST)",
+      "description": "Financial aid of ₹230-1200/month + fees.",
+      "criteria": "Category: SC, ST. Max Family Income: ₹2,50,000. Min Marks: 50%. Course: UG, PG.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Sant Sohirobanath Ambiye Bursary",
+      "description": "Financial support of ₹40,000/year.",
+      "criteria": "Category: General. Max Family Income: ₹5,00,000. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Manohar Parrikar Goa Scholars",
+      "description": "Scholarship of up to ₹8 Lakhs for studies abroad.",
+      "criteria": "Category: General. Min Marks: 60%. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Pre-Matric Scholarship (SC/ST Std 9-10)",
+      "description": "Financial support of ₹3,500-8,000/year.",
+      "criteria": "Category: SC, ST. Max Family Income: ₹2,50,000. Course: School (9th-10th).",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Chief Minister Scholarship",
+      "description": "Merit scholarship of ₹10K-60K/year.",
+      "criteria": "Category: SC, ST, OBC, EWS. Max Family Income: ₹6,00,000. Min Marks: 50%. Course: Diploma, UG, PG.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Fee Waiver Scheme (SC/ST)",
+      "description": "Full tuition fee waiver for higher education.",
+      "criteria": "Category: SC, ST. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Scheme for Promotion of Science",
+      "description": "Stipend of ₹2,000/month + ₹5,000 for books.",
+      "criteria": "Category: General. Min Marks: 75%. Course: UG (Science).",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Interest Free Education Loan",
+      "description": "Interest-free loan for higher studies.",
+      "criteria": "Category: General. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Dayanand Bandodkar Scheme for Orphans",
+      "description": "Financial aid for higher education.",
+      "criteria": "Category: General (Orphans). Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Vocational +2 Bursary (SC/ST)",
+      "description": "Fee waiver for vocational streams.",
+      "criteria": "Category: SC, ST. Course: School (Vocational).",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Gagan Bharari Shiksha Yojana",
+      "description": "Additional post-matric financial support.",
+      "criteria": "Category: SC, OBC. Max Family Income: ₹2,50,000. Course: UG, PG.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Pre-Matric Scholarship (OBC Std 1-10)",
+      "description": "School fees support.",
+      "criteria": "Category: OBC. Max Family Income: ₹2,50,000. Course: School.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Kanya Dhan Yojana",
+      "description": "Financial support for Girl Child.",
+      "criteria": "Category: SC (Girls). Course: School.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Eklavya Tribal Scholarships",
+      "description": "Support for Tribal residential students.",
+      "criteria": "Category: ST. Course: School.",
+      "url": "https://cmscholarship.goa.gov.in"
+    },
+    {
+      "name": "Goa Education Trust Scholarship",
+      "description": "Merit-based financial aid.",
+      "criteria": "Category: General. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Merit-cum-Means Scholarship",
+      "description": "Coverage of fees based on merit and means.",
+      "criteria": "Category: SC, ST, EWS. Max Family Income: ₹2,50,000. Min Marks: 50%. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Home Nursing Scheme",
+      "description": "Fees coverage for Nursing courses.",
+      "criteria": "Category: SC, ST, OBC. Course: Diploma (Nursing).",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "Scheme for Differently Abled Students",
+      "description": "Disability stipend for higher education.",
+      "criteria": "Category: Special Needs. Course: UG, PG.",
+      "url": "https://dhe.goa.gov.in"
+    },
+    {
+      "name": "RUSA Student Grants",
+      "description": "Infrastructure and research grants.",
+      "criteria": "Category: General. Course: UG.",
+      "url": "https://dhe.goa.gov.in"
     }
   ]
 }
